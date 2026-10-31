@@ -88,3 +88,7 @@ examples/tiny-repo/     # small fixture repo used by the tests
 ## Status
 
 Early development. First test target: [Google's Online Boutique](https://github.com/GoogleCloudPlatform/microservices-demo).
+
+## License
+
+repomap is released under the [MIT License](LICENSE).
