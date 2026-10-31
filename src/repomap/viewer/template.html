@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>repomap</title>
+  <!-- Cytoscape.js draws the graph. Pinned version + integrity hash, so the
+       browser refuses to run it if the CDN ever serves something different. -->
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.34.4/dist/cytoscape.min.js"
+          integrity="sha384-lyd1lDWZ623YSUJ/wMQH50y+T81dWKJk7ZoFdYWXQS83b0+QpW0pgdfXEnQnXL/X"
+          crossorigin="anonymous"></script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      grid-template-columns: 1fr 320px;
+      font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #1f2328;
+      background: #f6f8fa;
+    }
+    header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 8px 16px;
+      background: #fff;
+      border-bottom: 1px solid #d0d7de;
+    }
+    header h1 { font-size: 16px; margin: 0; }
+    header .stats { color: #59636e; }
+    header .controls { margin-left: auto; display: flex; gap: 8px; }
+    button {
+      font: inherit;
+      padding: 4px 10px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      background: #f6f8fa;
+      cursor: pointer;
+    }
+    button:hover { background: #eaeef2; }
+    button[aria-pressed="true"] { background: #ddf4ff; border-color: #54aeff; }
+    #cy { min-width: 0; min-height: 0; background: #fff; }
+    aside {
+      overflow: auto;
+      padding: 16px;
+      border-left: 1px solid #d0d7de;
+    }
+    aside h2 { font-size: 15px; margin: 0 0 12px; word-break: break-all; }
+    aside dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; }
+    aside dt { color: #59636e; }
+    aside dd { margin: 0; word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .hint { color: #59636e; }
+    .legend { margin-top: 24px; padding-top: 12px; border-top: 1px solid #d0d7de; color: #59636e; }
+    .legend span { display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -1px; }
+    #error { padding: 24px; color: #cf222e; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 id="repo-name">repomap</h1>
+    <span class="stats" id="stats"></span>
+    <div class="controls">
+      <button id="layout-clusters" aria-pressed="true">Clusters</button>
+      <button id="layout-tree" aria-pressed="false">Tree</button>
+      <button id="fit">Fit to screen</button>
+    </div>
+  </header>
+  <div id="cy"></div>
+  <aside>
+    <div id="details"><p class="hint">Click a node or edge to see its details. Scroll to zoom, drag to pan.</p></div>
+    <div class="legend">
+      <div><span style="background:#0969da;border-radius:3px"></span>directory</div>
+      <div><span style="background:#8c959f;border-radius:50%"></span>file</div>
+    </div>
+  </aside>
+
+  <!-- The graph data, embedded by repomap/viewer/render.py. -->
+  <script id="graph-data" type="application/json">__REPOMAP_GRAPH_JSON__</script>
+
+  <script>
+    "use strict";
+
+    const graph = JSON.parse(document.getElementById("graph-data").textContent);
+    const ROOT_ID = ".";
+
+    document.title = `repomap: ${graph.repo_name}`;
+    document.getElementById("repo-name").textContent = graph.repo_name;
+    const counts = { file: 0, directory: 0 };
+    for (const node of graph.nodes) counts[node.kind] = (counts[node.kind] || 0) + 1;
+    document.getElementById("stats").textContent =
+      `${counts.file} files · ${counts.directory} directories · generated ${graph.generated_at}`;
+
+    if (typeof cytoscape === "undefined") {
+      document.getElementById("cy").innerHTML =
+        '<p id="error">Could not load Cytoscape.js from the CDN. Check your internet connection and reload.</p>';
+      throw new Error("cytoscape not loaded");
+    }
+
+    // Cytoscape wants each element wrapped as { data: {...} }.
+    const elements = [
+      ...graph.nodes.map((node) => ({ group: "nodes", data: node })),
+      ...graph.edges.map((edge) => ({ group: "edges", data: edge })),
+    ];
+
+    const cy = cytoscape({
+      container: document.getElementById("cy"),
+      elements,
+      wheelSensitivity: 0.3,
+      style: [
+        {
+          selector: "node",
+          style: {
+            label: "data(label)",
+            "font-size": 10,
+            "text-valign": "bottom",
+            "text-margin-y": 3,
+            color: "#1f2328",
+            // Hide labels when zoomed far out, otherwise big repos become a blur.
+            "min-zoomed-font-size": 8,
+          },
+        },
+        {
+          selector: 'node[kind = "directory"]',
+          style: { shape: "round-rectangle", width: 18, height: 18, "background-color": "#0969da" },
+        },
+        {
+          selector: 'node[kind = "file"]',
+          style: { shape: "ellipse", width: 10, height: 10, "background-color": "#8c959f" },
+        },
+        {
+          selector: `node[id = "${ROOT_ID}"]`,
+          style: { width: 28, height: 28, "background-color": "#1a7f37", "font-size": 14, "font-weight": "bold" },
+        },
+        {
+          selector: "edge",
+          style: { width: 1, "line-color": "#d0d7de", "curve-style": "straight" },
+        },
+        {
+          selector: "node:selected",
+          style: { "background-color": "#bf8700", "border-width": 3, "border-color": "#9a6700", "z-index": 10 },
+        },
+        {
+          selector: "edge:selected",
+          style: { "line-color": "#bf8700", width: 3, "z-index": 10 },
+        },
+      ],
+    });
+
+    // "clusters" is a force-directed layout (cose): edges act like springs,
+    // so each folder ends up surrounded by its own files. It stays readable
+    // for big repos. "tree" is a classic top-down tree: clearer for small
+    // repos, but very wide once a repo has a few hundred files.
+    const layouts = {
+      clusters: { name: "cose", animate: false, randomize: false, nodeRepulsion: () => 8000, idealEdgeLength: () => 20 },
+      tree: { name: "breadthfirst", directed: true, roots: cy.getElementById(ROOT_ID), spacingFactor: 1.1, animate: false },
+    };
+
+    function runLayout(name) {
+      cy.layout(layouts[name]).run();
+      for (const key of Object.keys(layouts)) {
+        document.getElementById(`layout-${key}`).setAttribute("aria-pressed", String(key === name));
+      }
+    }
+
+    // Build the details panel with textContent (never innerHTML), so odd
+    // file names can't inject HTML into the page.
+    function showDetails(title, rows) {
+      const details = document.getElementById("details");
+      details.replaceChildren();
+      const heading = document.createElement("h2");
+      heading.textContent = title;
+      const list = document.createElement("dl");
+      for (const [key, value] of rows) {
+        const dt = document.createElement("dt");
+        dt.textContent = key;
+        const dd = document.createElement("dd");
+        dd.textContent = value;
+        list.append(dt, dd);
+      }
+      details.append(heading, list);
+    }
+
+    cy.on("tap", "node", (event) => {
+      const node = event.target;
+      const rows = [["kind", node.data("kind")], ["path", node.data("path")]];
+      const parent = node.incomers("node");
+      if (parent.nonempty()) rows.push(["parent", parent.first().data("path")]);
+      if (node.data("kind") === "directory") rows.push(["children", String(node.outgoers("node").length)]);
+      showDetails(node.data("label"), rows);
+    });
+
+    cy.on("tap", "edge", (event) => {
+      const edge = event.target;
+      const reason = edge.data("reason");
+      const rows = [
+        ["kind", edge.data("kind")],
+        ["from", edge.data("source")],
+        ["to", edge.data("target")],
+        ["why", reason.detail],
+        ["source file", reason.line == null ? reason.file : `${reason.file}:${reason.line}`],
+      ];
+      showDetails(`${edge.data("kind")} edge`, rows);
+    });
+
+    cy.on("tap", (event) => {
+      if (event.target === cy) {
+        document.getElementById("details").innerHTML =
+          '<p class="hint">Click a node or edge to see its details. Scroll to zoom, drag to pan.</p>';
+      }
+    });
+
+    document.getElementById("layout-clusters").addEventListener("click", () => runLayout("clusters"));
+    document.getElementById("layout-tree").addEventListener("click", () => runLayout("tree"));
+    document.getElementById("fit").addEventListener("click", () => cy.fit(undefined, 30));
+
+    runLayout("clusters");
+  </script>
+</body>
+</html>

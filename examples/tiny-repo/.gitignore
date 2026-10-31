@@ -1,0 +1,4 @@
+# Root ignore rules (the tests create matching files at runtime).
+*.log
+build/
+!keep.log
