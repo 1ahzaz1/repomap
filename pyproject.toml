@@ -3,6 +3,8 @@ name = "repomap"
 version = "0.1.0"
 description = "Turn a repository into an interactive map of its code and infrastructure."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Ahzaz Tahir", email = "ahzaztahir448@gmail.com" }
 ]
