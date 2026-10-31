@@ -1,0 +1,3 @@
+# Nested ignore rules: only apply inside src/.
+generated/
+!important.log

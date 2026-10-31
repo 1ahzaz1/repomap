@@ -1,1 +1,15 @@
-node_modules/
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+
+# repomap output
+repomap-out/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
